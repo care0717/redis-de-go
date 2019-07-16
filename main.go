@@ -9,7 +9,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 type INDEC int
@@ -18,30 +17,6 @@ const (
 	INC INDEC = iota
 	DEC
 )
-
-type SyncMap struct {
-	sm sync.Map
-}
-
-func (m *SyncMap) Load(key string) (string, bool) {
-	val, ok := m.sm.Load(key)
-	if !ok {
-		return "", false
-	}
-	return val.(string), true
-}
-
-func (m *SyncMap) Store(key, value string) {
-	m.sm.Store(key, value)
-}
-
-func (m *SyncMap) Delete(key string) {
-	m.sm.Delete(key)
-}
-
-func New() *SyncMap {
-	return &SyncMap{}
-}
 
 var memory = New()
 
