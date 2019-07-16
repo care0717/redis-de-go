@@ -10,50 +10,9 @@ import (
 	"strconv"
 	"strings"
 	stdtime "time"
+
+	"github.com/care0717/redis-de-go/resp"
 )
-
-type RESPBulkString string
-
-func (b RESPBulkString) String() string {
-	if l := len(b); l > 0 {
-		return "$" + strconv.Itoa(len(b)) + "\r\n" + string(b) + "\r\n"
-	} else {
-		return "$-1\r\n"
-	}
-}
-
-type RESPSimpleString string
-
-func (b RESPSimpleString) String() string {
-	return "+" + string(b) + "\r\n"
-}
-
-type RESPError string
-
-func (e RESPError) String() string {
-	return "-ERROR " + string(e) + "\r\n"
-}
-
-type RESPInteger int
-
-func (i RESPInteger) String() string {
-	return ":" + strconv.Itoa(int(i)) + "\r\n"
-}
-
-type Response interface {
-	String() string
-}
-
-type RESPArray []Response
-
-func (a RESPArray) String() string {
-	l := len(a)
-	res := "*" + strconv.Itoa(l) + "\r\n"
-	for i := 0; i < l; i++ {
-		res += a[i].String()
-	}
-	return res
-}
 
 type INDEC int
 
@@ -104,11 +63,11 @@ func readConn(conn net.Conn) ([]string, error) {
 		return make([]string, 1, 1), err
 	}
 	if line[0] != '*' {
-		return make([]string, 1, 1), errors.New(RESPError("missing start char").String())
+		return make([]string, 1, 1), errors.New(resp.Error("missing start char").String())
 	}
 	len, err := strconv.Atoi(strings.TrimRight(line[1:], "\r\n"))
 	if err != nil {
-		return make([]string, 1, 1), errors.New(RESPError("missing array number").String())
+		return make([]string, 1, 1), errors.New(resp.Error("missing array number").String())
 	}
 	buf := make([]string, len, len)
 	for i := 0; i < len; i++ {
@@ -118,7 +77,7 @@ func readConn(conn net.Conn) ([]string, error) {
 			return make([]string, 1, 1), err
 		}
 		if line[0] != '$' {
-			return make([]string, 1, 1), errors.New(RESPError("missing start char").String())
+			return make([]string, 1, 1), errors.New(resp.Error("missing start char").String())
 		}
 
 		line, err = r.ReadString('\n')
@@ -130,7 +89,7 @@ func readConn(conn net.Conn) ([]string, error) {
 	return buf, nil
 }
 
-func execCommand(commands []string) Response {
+func execCommand(commands []string) resp.RESP {
 	command := commands[0]
 	switch command {
 	case "ping":
@@ -152,41 +111,41 @@ func execCommand(commands []string) Response {
 	case "time":
 		return time()
 	default:
-		return RESPError("undefined command " + command)
+		return resp.Error("undefined command " + command)
 	}
 }
 
-func time() Response {
+func time() resp.RESP {
 	now := stdtime.Now().UnixNano() / 1000
-	timestamp := RESPBulkString(strconv.FormatInt(now/1000000, 10))
-	micro := RESPBulkString(strconv.FormatInt(now%1000000, 10))
-	return RESPArray{timestamp, micro}
+	timestamp := resp.BulkString(strconv.FormatInt(now/1000000, 10))
+	micro := resp.BulkString(strconv.FormatInt(now%1000000, 10))
+	return resp.Array{timestamp, micro}
 }
 
-func rename(keyNames []string) Response {
+func rename(keyNames []string) resp.RESP {
 	if len(keyNames) == 2 {
 		if memory.Rename(keyNames[0], keyNames[1]) {
-			return RESPSimpleString("OK")
+			return resp.SimpleString("OK")
 		} else {
-			return RESPError("no such key")
+			return resp.Error("no such key")
 		}
 	} else {
-		return RESPError("wrong number of arguments for 'rename' command")
+		return resp.Error("wrong number of arguments for 'rename' command")
 	}
 }
 
-func ping(echo []string) Response {
+func ping(echo []string) resp.RESP {
 	if len(echo) > 0 {
-		return RESPSimpleString(echo[0])
+		return resp.SimpleString(echo[0])
 	} else {
-		return RESPSimpleString("PONG")
+		return resp.SimpleString("PONG")
 	}
 }
 
-func set(keyValue []string) Response {
+func set(keyValue []string) resp.RESP {
 	if len(keyValue) == 2 {
 		memory.Store(keyValue[0], keyValue[1])
-		return RESPSimpleString("OK")
+		return resp.SimpleString("OK")
 	} else if len(keyValue) == 3 {
 		option := keyValue[2]
 		_, ok := memory.Load(keyValue[0])
@@ -194,39 +153,39 @@ func set(keyValue []string) Response {
 		case "nx":
 			{
 				if ok {
-					return RESPBulkString("")
+					return resp.BulkString("")
 				} else {
 					memory.Store(keyValue[0], keyValue[1])
-					return RESPSimpleString("OK")
+					return resp.SimpleString("OK")
 				}
 			}
 		case "xx":
 			{
 				if !ok {
-					return RESPBulkString("")
+					return resp.BulkString("")
 				} else {
 					memory.Store(keyValue[0], keyValue[1])
-					return RESPSimpleString("OK")
+					return resp.SimpleString("OK")
 				}
 			}
 		default:
-			return RESPError("invalid option")
+			return resp.Error("invalid option")
 		}
 	} else {
-		return RESPError("invalid key value set")
+		return resp.Error("invalid key value set")
 	}
 }
 
-func get(key string) Response {
+func get(key string) resp.RESP {
 	v, ok := memory.Load(key)
 	if ok {
-		return RESPBulkString(v)
+		return resp.BulkString(v)
 	} else {
-		return RESPError("unset key")
+		return resp.Error("unset key")
 	}
 }
 
-func del(keys []string) Response {
+func del(keys []string) resp.RESP {
 	count := 0
 	for _, key := range keys {
 		if _, ok := memory.Load(key); ok {
@@ -234,20 +193,20 @@ func del(keys []string) Response {
 			count += 1
 		}
 	}
-	return RESPInteger(count)
+	return resp.Integer(count)
 }
 
-func exists(key string) Response {
+func exists(key string) resp.RESP {
 	count := 0
 	if _, ok := memory.Load(key); ok {
 		count = 1
 	}
-	return RESPInteger(count)
+	return resp.Integer(count)
 }
 
-func changeValue(keyDiffs []string, indec INDEC) Response {
+func changeValue(keyDiffs []string, indec INDEC) resp.RESP {
 	if len(keyDiffs) < 2 {
-		return RESPError("wrong number of arguments")
+		return resp.Error("wrong number of arguments")
 	}
 
 	key := keyDiffs[0]
@@ -255,18 +214,18 @@ func changeValue(keyDiffs []string, indec INDEC) Response {
 
 	num, err := strconv.Atoi(diff)
 	if err != nil {
-		return RESPError("value is not an integer or out of range")
+		return resp.Error("value is not an integer or out of range")
 	}
 
 	v, ok := memory.Load(key)
 	if !ok {
 		memory.Store(key, diff)
-		return RESPInteger(num)
+		return resp.Integer(num)
 	}
 
 	val, err := strconv.Atoi(v)
 	if err != nil {
-		return RESPError("value is not an integer or out of range")
+		return resp.Error("value is not an integer or out of range")
 	}
 
 	var result int
@@ -281,5 +240,5 @@ func changeValue(keyDiffs []string, indec INDEC) Response {
 		}
 	}
 	memory.Store(key, strconv.Itoa(result))
-	return RESPInteger(result)
+	return resp.Integer(result)
 }
