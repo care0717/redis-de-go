@@ -11,6 +11,49 @@ import (
 	"strings"
 )
 
+type RESPBulkString string
+
+func (b RESPBulkString) String() string {
+	if l := len(b); l > 0 {
+		return "$" + strconv.Itoa(len(b)) + "\r\n" + string(b) + "\r\n"
+	} else {
+		return "$-1\r\n"
+	}
+}
+
+type RESPSimpleString string
+
+func (b RESPSimpleString) String() string {
+	return "+" + string(b) + "\r\n"
+}
+
+type RESPError string
+
+func (e RESPError) String() string {
+	return "-ERROR " + string(e) + "\r\n"
+}
+
+type RESPInteger int
+
+func (i RESPInteger) String() string {
+	return ":" + strconv.Itoa(int(i)) + "\r\n"
+}
+
+type Response interface {
+	String() string
+}
+
+type RESPArray []Response
+
+func (a RESPArray) String() string {
+	l := len(a)
+	res := "*" + strconv.Itoa(l) + "\r\n"
+	for i := 0; i < l; i++ {
+		res += a[i].String()
+	}
+	return res
+}
+
 type INDEC int
 
 const (
@@ -18,7 +61,7 @@ const (
 	DEC
 )
 
-var memory = New()
+var memory = SyncMap{}
 
 func main() {
 	port := "6379"
@@ -44,10 +87,10 @@ func handleConnection(conn net.Conn) {
 			break
 		}
 		if err != nil {
-			conn.Write([]byte(err.Error() + "\r\n"))
+			conn.Write([]byte(err.Error()))
 		}
 		response := execCommand(commands)
-		conn.Write([]byte(response + "\r\n"))
+		conn.Write([]byte(response.String()))
 	}
 	//fmt.Println("conn close")
 	conn.Close()
@@ -60,11 +103,11 @@ func readConn(conn net.Conn) ([]string, error) {
 		return make([]string, 1, 1), err
 	}
 	if line[0] != '*' {
-		return make([]string, 1, 1), errors.New("-Error missing start char")
+		return make([]string, 1, 1), errors.New(RESPError("missing start char").String())
 	}
 	len, err := strconv.Atoi(strings.TrimRight(line[1:], "\r\n"))
 	if err != nil {
-		return make([]string, 1, 1), errors.New("-Error missing array number")
+		return make([]string, 1, 1), errors.New(RESPError("missing array number").String())
 	}
 	buf := make([]string, len, len)
 	for i := 0; i < len; i++ {
@@ -74,7 +117,7 @@ func readConn(conn net.Conn) ([]string, error) {
 			return make([]string, 1, 1), err
 		}
 		if line[0] != '$' {
-			return make([]string, 1, 1), errors.New("-Error missing start char")
+			return make([]string, 1, 1), errors.New(RESPError("missing start char").String())
 		}
 
 		line, err = r.ReadString('\n')
@@ -86,7 +129,7 @@ func readConn(conn net.Conn) ([]string, error) {
 	return buf, nil
 }
 
-func execCommand(commands []string) string {
+func execCommand(commands []string) Response {
 	command := commands[0]
 	switch command {
 	case "ping":
@@ -106,34 +149,34 @@ func execCommand(commands []string) string {
 	case "rename":
 		return rename(commands[1:])
 	default:
-		return "-Error undefined command " + command
+		return RESPError("undefined command " + command)
 	}
 }
 
-func rename(keyNames []string) string {
+func rename(keyNames []string) Response {
 	if len(keyNames) == 2 {
 		if memory.Rename(keyNames[0], keyNames[1]) {
-			return "+OK"
+			return RESPSimpleString("OK")
 		} else {
-			return "-Error no such key"
+			return RESPError("no such key")
 		}
 	} else {
-		return "-Error wrong number of arguments for 'rename' command"
+		return RESPError("wrong number of arguments for 'rename' command")
 	}
 }
 
-func ping(echo []string) string {
+func ping(echo []string) Response {
 	if len(echo) > 0 {
-		return "+" + echo[0]
+		return RESPSimpleString(echo[0])
 	} else {
-		return "+PONG"
+		return RESPSimpleString("PONG")
 	}
 }
 
-func set(keyValue []string) string {
+func set(keyValue []string) Response {
 	if len(keyValue) == 2 {
 		memory.Store(keyValue[0], keyValue[1])
-		return "+OK"
+		return RESPSimpleString("OK")
 	} else if len(keyValue) == 3 {
 		option := keyValue[2]
 		_, ok := memory.Load(keyValue[0])
@@ -141,39 +184,39 @@ func set(keyValue []string) string {
 		case "nx":
 			{
 				if ok {
-					return "$-1"
+					return RESPBulkString("")
 				} else {
 					memory.Store(keyValue[0], keyValue[1])
-					return "+OK"
+					return RESPSimpleString("OK")
 				}
 			}
 		case "xx":
 			{
 				if !ok {
-					return "$-1"
+					return RESPBulkString("")
 				} else {
 					memory.Store(keyValue[0], keyValue[1])
-					return "+OK"
+					return RESPSimpleString("OK")
 				}
 			}
 		default:
-			return "-Error invalid option"
+			return RESPError("invalid option")
 		}
 	} else {
-		return "-Error invalid key value set"
+		return RESPError("invalid key value set")
 	}
 }
 
-func get(key string) string {
+func get(key string) Response {
 	v, ok := memory.Load(key)
 	if ok {
-		return "$" + strconv.Itoa(len(v)) + "\r\n" + v
+		return RESPBulkString(v)
 	} else {
-		return "-Error unset key"
+		return RESPError("unset key")
 	}
 }
 
-func del(keys []string) string {
+func del(keys []string) Response {
 	count := 0
 	for _, key := range keys {
 		if _, ok := memory.Load(key); ok {
@@ -181,47 +224,52 @@ func del(keys []string) string {
 			count += 1
 		}
 	}
-	return ":" + strconv.Itoa(count)
+	return RESPInteger(count)
 }
 
-func exists(key string) string {
+func exists(key string) Response {
 	count := 0
 	if _, ok := memory.Load(key); ok {
 		count = 1
 	}
-	return ":" + strconv.Itoa(count)
+	return RESPInteger(count)
 }
 
-func changeValue(keyDiffs []string, indec INDEC) string {
+func changeValue(keyDiffs []string, indec INDEC) Response {
 	if len(keyDiffs) < 2 {
-		return "-Error wrong number of arguments"
+		return RESPError("wrong number of arguments")
 	}
+
 	key := keyDiffs[0]
 	diff := keyDiffs[1]
+
+	num, err := strconv.Atoi(diff)
+	if err != nil {
+		return RESPError("value is not an integer or out of range")
+	}
+
 	v, ok := memory.Load(key)
 	if !ok {
 		memory.Store(key, diff)
-		return ":" + diff
+		return RESPInteger(num)
 	}
+
 	val, err := strconv.Atoi(v)
 	if err != nil {
-		return "-Error value is not an integer or out of range"
+		return RESPError("value is not an integer or out of range")
 	}
-	num, err := strconv.Atoi(diff)
-	if err != nil {
-		return "-Error value is not an integer or out of range"
-	}
-	var result string
+
+	var result int
 	switch indec {
 	case INC:
 		{
-			result = strconv.Itoa(val + num)
+			result = val + num
 		}
 	case DEC:
 		{
-			result = strconv.Itoa(val - num)
+			result = val - num
 		}
 	}
-	memory.Store(key, result)
-	return ":" + result
+	memory.Store(key, strconv.Itoa(result))
+	return RESPInteger(result)
 }
