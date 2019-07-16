@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	stdtime "time"
 )
 
 type RESPBulkString string
@@ -148,9 +149,18 @@ func execCommand(commands []string) Response {
 		return changeValue(commands[1:], DEC)
 	case "rename":
 		return rename(commands[1:])
+	case "time":
+		return time()
 	default:
 		return RESPError("undefined command " + command)
 	}
+}
+
+func time() Response {
+	now := stdtime.Now().UnixNano() / 1000
+	timestamp := RESPBulkString(strconv.FormatInt(now/1000000, 10))
+	micro := RESPBulkString(strconv.FormatInt(now%1000000, 10))
+	return RESPArray{timestamp, micro}
 }
 
 func rename(keyNames []string) Response {
