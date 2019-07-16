@@ -103,8 +103,22 @@ func execCommand(commands []string) string {
 		return changeValue(commands[1:], INC)
 	case "decrby":
 		return changeValue(commands[1:], DEC)
+	case "rename":
+		return rename(commands[1:])
 	default:
 		return "-Error undefined command " + command
+	}
+}
+
+func rename(keyNames []string) string {
+	if len(keyNames) == 2 {
+		if memory.Rename(keyNames[0], keyNames[1]) {
+			return "+OK"
+		} else {
+			return "-Error no such key"
+		}
+	} else {
+		return "-Error wrong number of arguments for 'rename' command"
 	}
 }
 
