@@ -110,9 +110,24 @@ func execCommand(commands []string) resp.RESP {
 		return rename(commands[1:])
 	case "time":
 		return time()
+	case "append":
+		return append(commands[1:])
 	default:
 		return resp.Error("undefined command " + command)
 	}
+}
+
+func append(keyValue []string) resp.RESP {
+	if len(keyValue) != 2 {
+		return resp.Error("wrong number of arguments for 'rename' command")
+	}
+
+	key := keyValue[0]
+	value := keyValue[1]
+	v, _ := memory.Load(key)
+	newValue := v + value
+	memory.Store(key, newValue)
+	return resp.Integer(len(newValue))
 }
 
 func time() resp.RESP {
