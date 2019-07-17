@@ -123,15 +123,16 @@ func time() resp.RESP {
 }
 
 func rename(keyNames []string) resp.RESP {
-	if len(keyNames) == 2 {
-		if memory.Rename(keyNames[0], keyNames[1]) {
-			return resp.SimpleString("OK")
-		} else {
-			return resp.Error("no such key")
-		}
-	} else {
+	if len(keyNames) != 2 {
 		return resp.Error("wrong number of arguments for 'rename' command")
 	}
+
+	if memory.Rename(keyNames[0], keyNames[1]) {
+		return resp.SimpleString("OK")
+	} else {
+		return resp.Error("no such key")
+	}
+
 }
 
 func ping(echo []string) resp.RESP {
