@@ -11,6 +11,8 @@ import (
 	"strings"
 	stdtime "time"
 
+	"github.com/care0717/redis-de-go/syncmap"
+
 	"github.com/care0717/redis-de-go/resp"
 )
 
@@ -21,7 +23,7 @@ const (
 	DEC
 )
 
-var memory = SyncMap{}
+var memory = syncmap.SyncMap{}
 
 func main() {
 	port := "6379"
@@ -112,9 +114,15 @@ func execCommand(commands []string) resp.RESP {
 		return time()
 	case "append":
 		return append(commands[1:])
+	case "dbsize":
+		return dbsize()
 	default:
 		return resp.Error("undefined command " + command)
 	}
+}
+
+func dbsize() resp.RESP {
+	return resp.Integer(len(memory.Keys()))
 }
 
 func append(keyValue []string) resp.RESP {
