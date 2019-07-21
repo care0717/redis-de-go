@@ -1,6 +1,8 @@
 package resp
 
-import "strconv"
+import (
+	"strconv"
+)
 
 type BulkString string
 
@@ -18,10 +20,17 @@ func (b SimpleString) String() string {
 	return "+" + string(b) + "\r\n"
 }
 
+type RESPError interface {
+	String() string
+	Error() string
+}
 type Error string
 
 func (e Error) String() string {
 	return "-ERROR " + string(e) + "\r\n"
+}
+func (e Error) Error() string {
+	return string(e)
 }
 
 type Integer int

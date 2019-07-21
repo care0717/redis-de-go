@@ -104,10 +104,24 @@ func execCommand(commands []string) resp.RESP {
 		return del(commands[1:])
 	case "exists":
 		return exists(commands[1])
-	case "incrby":
-		return changeValue(commands[1:], INC)
-	case "decrby":
-		return changeValue(commands[1:], DEC)
+	case "incrby", "decrby":
+		key, diff, err := indecFormat(commands)
+		if err != nil {
+			return err
+		}
+		return changeValue(key, diff)
+	case "incr", "decr":
+		if len(commands) != 2 {
+			return resp.Error("wrong number of arguments")
+		}
+		key := commands[1]
+		var diff int
+		if command == "incr" {
+			diff = 1
+		} else {
+			diff = -1
+		}
+		return changeValue(key, diff)
 	case "rename":
 		return rename(commands[1:])
 	case "time":
@@ -228,23 +242,29 @@ func exists(key string) resp.RESP {
 	return resp.Integer(count)
 }
 
-func changeValue(keyDiffs []string, indec INDEC) resp.RESP {
-	if len(keyDiffs) < 2 {
-		return resp.Error("wrong number of arguments")
+func indecFormat(commands []string) (string, int, resp.RESPError) {
+	if len(commands) != 3 {
+		return "", 0, resp.Error("wrong number of arguments")
 	}
 
-	key := keyDiffs[0]
-	diff := keyDiffs[1]
+	key := commands[1]
+	diff := commands[2]
 
 	num, err := strconv.Atoi(diff)
 	if err != nil {
-		return resp.Error("value is not an integer or out of range")
+		return "", 0, resp.Error("value is not an integer or out of range")
 	}
+	if commands[0] == "decrby" {
+		num = -num
+	}
+	return key, num, nil
+}
 
+func changeValue(key string, diff int) resp.RESP {
 	v, ok := memory.Load(key)
 	if !ok {
-		memory.Store(key, diff)
-		return resp.Integer(num)
+		memory.Store(key, strconv.Itoa(diff))
+		return resp.Integer(diff)
 	}
 
 	val, err := strconv.Atoi(v)
@@ -252,17 +272,7 @@ func changeValue(keyDiffs []string, indec INDEC) resp.RESP {
 		return resp.Error("value is not an integer or out of range")
 	}
 
-	var result int
-	switch indec {
-	case INC:
-		{
-			result = val + num
-		}
-	case DEC:
-		{
-			result = val - num
-		}
-	}
+	result := val + diff
 	memory.Store(key, strconv.Itoa(result))
 	return resp.Integer(result)
 }
