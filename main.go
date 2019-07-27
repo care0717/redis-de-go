@@ -130,9 +130,26 @@ func execCommand(commands []string) resp.RESP {
 		return append(commands[1:])
 	case "dbsize":
 		return dbsize()
+	case "touch":
+		return touch(commands[1:])
 	default:
 		return resp.Error("undefined command " + command)
 	}
+}
+
+func touch(keys []string) resp.RESP {
+	if len(keys) == 0 {
+		return resp.Error("wrong number of arguments for 'touch' command")
+	}
+	var counter int
+
+	for _, key := range keys {
+		if _, ok := memory.Load(key); ok {
+			counter += 1
+		}
+	}
+
+	return resp.Integer(counter)
 }
 
 func dbsize() resp.RESP {
@@ -141,7 +158,7 @@ func dbsize() resp.RESP {
 
 func append(keyValue []string) resp.RESP {
 	if len(keyValue) != 2 {
-		return resp.Error("wrong number of arguments for 'rename' command")
+		return resp.Error("wrong number of arguments for 'append' command")
 	}
 
 	key := keyValue[0]
