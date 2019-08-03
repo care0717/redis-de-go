@@ -132,9 +132,26 @@ func execCommand(commands []string) resp.RESP {
 		return dbsize()
 	case "touch":
 		return touch(commands[1:])
+	case "mget":
+		return multiGet(commands[1:])
 	default:
 		return resp.Error("undefined command " + command)
 	}
+}
+
+func multiGet(keys []string) resp.RESP {
+	if len(keys) == 0 {
+		return resp.Error("wrong number of arguments for 'touch' command")
+	}
+	values := make(resp.Array, len(keys))
+	for i, key := range keys {
+		if v, ok := memory.Load(key); ok {
+			values[i] = resp.BulkString(v)
+		} else {
+			values[i] = resp.BulkString("")
+		}
+	}
+	return values
 }
 
 func touch(keys []string) resp.RESP {
