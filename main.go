@@ -134,6 +134,8 @@ func execCommand(commands []string) resp.RESP {
 		return touch(commands[1:])
 	case "mget":
 		return multiGet(commands[1:])
+	case "mset":
+		return multiSet(commands[1:])
 	default:
 		return resp.Error("undefined command " + command)
 	}
@@ -141,17 +143,25 @@ func execCommand(commands []string) resp.RESP {
 
 func multiGet(keys []string) resp.RESP {
 	if len(keys) == 0 {
-		return resp.Error("wrong number of arguments for 'touch' command")
+		return resp.Error("wrong number of arguments for 'mget' command")
 	}
 	values := make(resp.Array, len(keys))
 	for i, key := range keys {
-		if v, ok := memory.Load(key); ok {
-			values[i] = resp.BulkString(v)
-		} else {
-			values[i] = resp.BulkString("")
-		}
+		values[i] = get(key)
 	}
 	return values
+}
+
+func multiSet(keyValues []string) resp.RESP {
+	if len(keyValues) == 0 || len(keyValues)%2 == 1 {
+		return resp.Error("wrong number of arguments for 'mset' command")
+	}
+	for i := 0; i < len(keyValues); i += 2 {
+		key := keyValues[i]
+		value := keyValues[i+1]
+		set([]string{key, value})
+	}
+	return resp.SimpleString("OK")
 }
 
 func touch(keys []string) resp.RESP {
@@ -253,7 +263,7 @@ func get(key string) resp.RESP {
 	if ok {
 		return resp.BulkString(v)
 	} else {
-		return resp.Error("unset key")
+		return resp.BulkString("")
 	}
 }
 
