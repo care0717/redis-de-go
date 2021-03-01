@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -19,13 +20,19 @@ import (
 var memory = syncmap.SyncMap{}
 
 func main() {
-	port := "6379"
-	ln, err := net.Listen("tcp", ":"+port)
+	var (
+		host string
+		port int
+	)
+	flag.StringVar(&host, "host", "localhost", "Listen ip address")
+	flag.IntVar(&port, "port", 6379, "Listen port")
+	addr := fmt.Sprintf("%s:%d", host, port)
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Println("Listning on port " + port)
+	fmt.Printf("listening on %s\n", addr)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
