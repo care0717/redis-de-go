@@ -26,6 +26,7 @@ func main() {
 	)
 	flag.StringVar(&host, "host", "localhost", "Listen ip address")
 	flag.IntVar(&port, "port", 6379, "Listen port")
+	flag.Parse()
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
