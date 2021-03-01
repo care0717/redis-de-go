@@ -38,53 +38,75 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 		}
-		go handleConnection(conn)
+		fmt.Printf("connection succeeded from %s\n", conn.RemoteAddr())
+		go func(conn net.Conn) {
+			err := handleConnection(conn)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}(conn)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn) error {
+	defer conn.Close()
 	for {
 		commands, err := readConn(conn)
 		if err == io.EOF {
 			break
 		}
+		writer := bufio.NewWriter(conn)
 		if err != nil {
-			conn.Write([]byte(err.Error()))
+			_, err = writer.Write([]byte(resp.Error(err.Error()).String()))
+			if err != nil {
+				return err
+			}
+			err = writer.Flush()
+			if err != nil {
+				return err
+			}
+			continue
 		}
 		response := execCommand(commands)
-		conn.Write([]byte(response.String()))
+		_, err = writer.Write([]byte(response.String()))
+		if err != nil {
+			return err
+		}
+		err = writer.Flush()
+		if err != nil {
+			return err
+		}
 	}
-	//fmt.Println("conn close")
-	conn.Close()
+	return nil
 }
 
 func readConn(conn net.Conn) ([]string, error) {
 	r := bufio.NewReader(conn)
 	line, err := r.ReadString('\n')
 	if err != nil {
-		return make([]string, 1, 1), err
+		return nil, err
 	}
 	if line[0] != '*' {
-		return make([]string, 1, 1), errors.New(resp.Error("missing start char").String())
+		return nil, errors.New("missing start char `*`")
 	}
-	len, err := strconv.Atoi(strings.TrimRight(line[1:], "\r\n"))
+	length, err := strconv.Atoi(strings.TrimRight(line[1:], "\r\n"))
 	if err != nil {
-		return make([]string, 1, 1), errors.New(resp.Error("missing array number").String())
+		return nil, errors.New("missing array length")
 	}
-	buf := make([]string, len, len)
-	for i := 0; i < len; i++ {
+	buf := make([]string, length)
+	for i := 0; i < length; i++ {
 		line, err := r.ReadString('\n')
 
 		if err != nil {
-			return make([]string, 1, 1), err
+			return nil, err
 		}
 		if line[0] != '$' {
-			return make([]string, 1, 1), errors.New(resp.Error("missing start char").String())
+			return nil, errors.New("missing start char `$`")
 		}
 
 		line, err = r.ReadString('\n')
 		if err != nil {
-			return make([]string, 1, 1), err
+			return nil, err
 		}
 		buf[i] = strings.ToLower(strings.TrimRight(line, "\r\n"))
 	}
