@@ -1,6 +1,7 @@
 package resp
 
 import (
+	"fmt"
 	"strconv"
 )
 
@@ -31,6 +32,10 @@ func (e Error) String() string {
 }
 func (e Error) Error() string {
 	return string(e)
+}
+
+func NewWrongNumberArgumentError(commandName string) RESPError {
+	return Error(fmt.Sprintf("wrong number of arguments for '%s' command", commandName))
 }
 
 type Integer int

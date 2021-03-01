@@ -122,11 +122,11 @@ func execCommand(commands []string) resp.RESP {
 	case "set":
 		return set(commands[1:])
 	case "get":
-		return get(commands[1])
+		return get(commands[1:])
 	case "del":
 		return del(commands[1:])
 	case "exists":
-		return exists(commands[1])
+		return exists(commands[1:])
 	case "incrby", "decrby":
 		key, diff, err := indecFormat(commands)
 		if err != nil {
@@ -135,7 +135,7 @@ func execCommand(commands []string) resp.RESP {
 		return changeValue(key, diff)
 	case "incr", "decr":
 		if len(commands) != 2 {
-			return resp.Error("wrong number of arguments")
+			return resp.NewWrongNumberArgumentError(command)
 		}
 		key := commands[1]
 		var diff int
@@ -150,7 +150,7 @@ func execCommand(commands []string) resp.RESP {
 	case "time":
 		return time()
 	case "append":
-		return append(commands[1:])
+		return appendValue(commands[1:])
 	case "dbsize":
 		return dbsize()
 	case "touch":
@@ -166,18 +166,18 @@ func execCommand(commands []string) resp.RESP {
 
 func multiGet(keys []string) resp.RESP {
 	if len(keys) == 0 {
-		return resp.Error("wrong number of arguments for 'mget' command")
+		return resp.NewWrongNumberArgumentError("mget")
 	}
 	values := make(resp.Array, len(keys))
 	for i, key := range keys {
-		values[i] = get(key)
+		values[i] = get([]string{key})
 	}
 	return values
 }
 
 func multiSet(keyValues []string) resp.RESP {
 	if len(keyValues) == 0 || len(keyValues)%2 == 1 {
-		return resp.Error("wrong number of arguments for 'mset' command")
+		return resp.NewWrongNumberArgumentError("mset")
 	}
 	for i := 0; i < len(keyValues); i += 2 {
 		key := keyValues[i]
@@ -189,7 +189,7 @@ func multiSet(keyValues []string) resp.RESP {
 
 func touch(keys []string) resp.RESP {
 	if len(keys) == 0 {
-		return resp.Error("wrong number of arguments for 'touch' command")
+		return resp.NewWrongNumberArgumentError("touch")
 	}
 	var counter int
 
@@ -206,9 +206,9 @@ func dbsize() resp.RESP {
 	return resp.Integer(len(memory.Keys()))
 }
 
-func append(keyValue []string) resp.RESP {
+func appendValue(keyValue []string) resp.RESP {
 	if len(keyValue) != 2 {
-		return resp.Error("wrong number of arguments for 'append' command")
+		return resp.NewWrongNumberArgumentError("append")
 	}
 
 	key := keyValue[0]
@@ -228,7 +228,7 @@ func time() resp.RESP {
 
 func rename(keyNames []string) resp.RESP {
 	if len(keyNames) != 2 {
-		return resp.Error("wrong number of arguments for 'rename' command")
+		return resp.NewWrongNumberArgumentError("rename")
 	}
 
 	if memory.Rename(keyNames[0], keyNames[1]) {
@@ -281,8 +281,11 @@ func set(keyValue []string) resp.RESP {
 	}
 }
 
-func get(key string) resp.RESP {
-	v, ok := memory.Load(key)
+func get(key []string) resp.RESP {
+	if len(key) != 1 {
+		return resp.NewWrongNumberArgumentError("get")
+	}
+	v, ok := memory.Load(key[0])
 	if ok {
 		return resp.BulkString(v)
 	} else {
@@ -301,9 +304,12 @@ func del(keys []string) resp.RESP {
 	return resp.Integer(count)
 }
 
-func exists(key string) resp.RESP {
+func exists(key []string) resp.RESP {
+	if len(key) != 1 {
+		return resp.NewWrongNumberArgumentError("exists")
+	}
 	count := 0
-	if _, ok := memory.Load(key); ok {
+	if _, ok := memory.Load(key[0]); ok {
 		count = 1
 	}
 	return resp.Integer(count)
@@ -311,7 +317,7 @@ func exists(key string) resp.RESP {
 
 func indecFormat(commands []string) (string, int, resp.RESPError) {
 	if len(commands) != 3 {
-		return "", 0, resp.Error("wrong number of arguments")
+		return "", 0, resp.NewWrongNumberArgumentError(commands[0])
 	}
 
 	key := commands[1]
