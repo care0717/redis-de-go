@@ -16,13 +16,6 @@ import (
 	"github.com/care0717/redis-de-go/resp"
 )
 
-type INDEC int
-
-const (
-	INC INDEC = iota
-	DEC
-)
-
 var memory = syncmap.SyncMap{}
 
 func main() {
